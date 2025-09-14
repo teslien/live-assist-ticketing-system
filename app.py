@@ -257,4 +257,10 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') != 'production'
     
-    socketio.run(app, debug=debug, host='0.0.0.0', port=port)
+    # For production deployment, allow unsafe werkzeug or use gunicorn
+    if os.environ.get('RENDER') or os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('DYNO'):
+        # Production environment detected
+        socketio.run(app, debug=False, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+    else:
+        # Development environment
+        socketio.run(app, debug=debug, host='0.0.0.0', port=port)

@@ -10,11 +10,12 @@ This Flask ticketing system with WebSocket support can be deployed on several pl
 3. **Create Web Service**: 
    - Choose "Web Service"
    - Connect your repository
-   - Use these settings:
+   - Render will auto-detect the `render.yaml` configuration
+   - Or manually set:
      - **Build Command**: `pip install -r requirements.txt`
-     - **Start Command**: `python app.py`
+     - **Start Command**: `gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT wsgi:application`
      - **Environment**: `Python 3`
-4. **Deploy**: Render will automatically deploy your app
+4. **Deploy**: Render will automatically deploy your app with production server
 
 ### Features:
 - ✅ WebSocket support
