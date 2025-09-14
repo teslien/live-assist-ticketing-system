@@ -673,38 +673,33 @@
         const allClosedTickets = document.querySelectorAll('#closed-tickets-container [data-ticket-id]');
         let visibleCount = 0;
         
-        console.log('Filtering tickets with fromDate:', fromDate, 'toDate:', toDate);
-        console.log('Found', allClosedTickets.length, 'closed tickets');
-        
         allClosedTickets.forEach(ticketElement => {
-            const ticketDateElement = ticketElement.querySelector('.text-muted small');
+            // Try multiple selectors to find the date
+            let ticketDateElement = ticketElement.querySelector('.text-muted small');
             if (!ticketDateElement) {
-                console.log('No date element found for ticket');
+                ticketDateElement = ticketElement.querySelector('small.text-muted');
+            }
+            
+            if (!ticketDateElement) {
+                // If no date element found, show the ticket
                 ticketElement.style.display = 'block';
                 visibleCount++;
                 return;
             }
             
             const ticketDateText = ticketDateElement.textContent;
-            console.log('Ticket date text:', ticketDateText);
-            
             const ticketDate = extractDateFromText(ticketDateText);
-            console.log('Extracted date:', ticketDate);
             
             if (ticketDate) {
                 const isInRange = isDateInRange(ticketDate, fromDate, toDate);
-                console.log('Is in range:', isInRange, 'for date:', ticketDate);
                 ticketElement.style.display = isInRange ? 'block' : 'none';
                 if (isInRange) visibleCount++;
             } else {
-                // If we can't extract date, show the ticket
-                console.log('Could not extract date, showing ticket');
+                // If we can't extract date, show the ticket (fail-safe)
                 ticketElement.style.display = 'block';
                 visibleCount++;
             }
         });
-        
-        console.log('Visible count:', visibleCount);
         
         // Update count to show filtered results
         const closedCountBadge = document.querySelector('#closed-count');
@@ -715,21 +710,20 @@
     }
     
     function extractDateFromText(text) {
-        console.log('Extracting date from:', text);
-        
         // Try multiple date formats that might be in the database
         const patterns = [
             /Created:\s*(\d{4}-\d{2}-\d{2})/,  // YYYY-MM-DD
             /Created:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/,  // YYYY-MM-DD HH:MM:SS
             /Created:\s*(\d{1,2}\/\d{1,2}\/\d{4})/,  // MM/DD/YYYY or M/D/YYYY
             /Created:\s*(\d{1,2}-\d{1,2}-\d{4})/,   // MM-DD-YYYY or M-D-YYYY
+            /(\d{4}-\d{2}-\d{2})/,  // Just YYYY-MM-DD anywhere in text
+            /(\d{1,2}\/\d{1,2}\/\d{4})/,  // Just MM/DD/YYYY anywhere in text
         ];
         
         for (let pattern of patterns) {
             const match = text.match(pattern);
             if (match) {
                 let dateStr = match[1];
-                console.log('Matched pattern, raw date:', dateStr);
                 
                 // Convert to YYYY-MM-DD format if needed
                 if (dateStr.includes('/')) {
@@ -743,12 +737,10 @@
                     dateStr = dateStr.split(' ')[0];
                 }
                 
-                console.log('Converted date:', dateStr);
                 return dateStr;
             }
         }
         
-        console.log('No date pattern matched');
         return null;
     }
     

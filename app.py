@@ -251,4 +251,10 @@ def handle_disconnect():
 if __name__ == '__main__':
     # Initialize database on startup
     init_db()
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    
+    # Get port from environment variable for deployment
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    socketio.run(app, debug=debug, host='0.0.0.0', port=port)
