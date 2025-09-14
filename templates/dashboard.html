@@ -1,0 +1,806 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Ticket System{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h2">Ticket System Dashboard</h1>
+    <div class="d-flex gap-2 align-items-center">
+        {% set live_tickets = tickets | selectattr('status', 'in', ['Open', 'Pending']) | list %}
+        {% set closed_tickets = tickets | selectattr('status', 'equalto', 'Closed') | list %}
+        <span class="badge bg-success">{{ live_tickets|length }} Live</span>
+        <span class="badge bg-secondary">{{ closed_tickets|length }} Closed</span>
+        <span class="badge bg-primary">{{ tickets|length }} Total</span>
+    </div>
+</div>
+
+<!-- Live Tickets Section (Always Show) -->
+{% set live_tickets = tickets | selectattr('status', 'in', ['Open', 'Pending']) | list %}
+<div class="mb-5" id="live-tickets-section">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="h4 text-primary">
+            <i class="fas fa-bolt me-2"></i>Live Tickets
+        </h3>
+        <span class="badge bg-primary fs-6" id="live-count">{{ live_tickets|length }} Active</span>
+    </div>
+    <div class="row" id="live-tickets-container">
+        {% if live_tickets %}
+            {% for ticket in live_tickets %}
+                <div class="col-md-6 col-lg-4 mb-4" data-ticket-id="{{ ticket.id }}">
+                    <div class="card ticket-card h-100 border-primary">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                            <h6 class="mb-0">
+                                <i class="fas fa-hashtag"></i> Ticket #{{ ticket.id }}
+                            </h6>
+                            <span class="badge bg-{% if ticket.status == 'Open' %}success{% else %}warning{% endif %}">
+                                {{ ticket.status }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="fas fa-user me-1"></i>{{ ticket.user_id }}
+                            </h6>
+                            
+                            {% if ticket.product_id %}
+                                <p class="text-muted mb-2">
+                                    <small><i class="fas fa-box me-1"></i>Product: {{ ticket.product_id }}</small>
+                                </p>
+                            {% endif %}
+                            
+                            <div class="mb-3">
+                                <a href="{{ ticket.pdf_link }}" target="_blank" class="pdf-link">
+                                    <i class="fas fa-file-pdf me-1"></i>View PDF Guide
+                                </a>
+                            </div>
+                            
+                            {% if ticket.description %}
+                                <div class="mb-2">
+                                    <strong>Description:</strong>
+                                    <p class="small text-muted mb-0">{{ ticket.description[:100] }}{% if ticket.description|length > 100 %}...{% endif %}</p>
+                                </div>
+                            {% endif %}
+                            
+                            {% if ticket.comments %}
+                                <div class="mb-2">
+                                    <strong>Comments:</strong>
+                                    <p class="small text-muted mb-0">{{ ticket.comments[:100] }}{% if ticket.comments|length > 100 %}...{% endif %}</p>
+                                </div>
+                            {% endif %}
+                            
+                            <small class="text-muted">
+                                <i class="fas fa-calendar me-1"></i>Created: {{ ticket.created_at }}
+                            </small>
+                        </div>
+                        <div class="card-footer ticket-actions">
+                            <a href="{{ url_for('view_ticket', ticket_id=ticket.id) }}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-eye me-1"></i>View/Edit
+                            </a>
+                            
+                            {% if ticket.status == 'Open' %}
+                                <a href="{{ url_for('update_status', ticket_id=ticket.id, status='Pending') }}" 
+                                   class="btn btn-warning btn-sm"
+                                   onclick="return confirm('Mark ticket as Pending?')">
+                                    <i class="fas fa-clock me-1"></i>Mark Pending
+                                </a>
+                            {% elif ticket.status == 'Pending' %}
+                                <a href="{{ url_for('update_status', ticket_id=ticket.id, status='Closed') }}" 
+                                   class="btn btn-success btn-sm"
+                                   onclick="return confirm('Close this ticket?')">
+                                    <i class="fas fa-check me-1"></i>Close
+                                </a>
+                                <a href="{{ url_for('update_status', ticket_id=ticket.id, status='Open') }}" 
+                                   class="btn btn-info btn-sm"
+                                   onclick="return confirm('Reopen this ticket?')">
+                                    <i class="fas fa-undo me-1"></i>Reopen
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="text-center py-4 border-2 border-dashed border-primary rounded">
+                    <i class="fas fa-plus-circle fa-2x text-primary mb-2"></i>
+                    <h5 class="text-primary">Waiting for Live Tickets</h5>
+                    <p class="text-muted mb-3">New tickets will appear here instantly when created via API</p>
+                    <div class="small text-muted">
+                        <strong>API Endpoint:</strong> <code>POST /create_ticket</code>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Closed Tickets Section (Always Show) -->
+{% set closed_tickets = tickets | selectattr('status', 'equalto', 'Closed') | list %}
+<div class="mb-4" id="closed-tickets-section">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="h4 text-secondary">
+            <i class="fas fa-archive me-2"></i>Closed Tickets
+        </h3>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary fs-6" id="closed-count">{{ closed_tickets|length }} Closed</span>
+            {% if closed_tickets %}
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#closed-tickets" aria-expanded="false">
+                    <i class="fas fa-chevron-down me-1"></i>Show/Hide
+                </button>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Date Filter Controls -->
+    {% if closed_tickets %}
+        <div class="row mb-3" id="date-filter-controls">
+            <div class="col-md-12">
+                <div class="card bg-light">
+                    <div class="card-body py-3">
+                        <div class="row align-items-center">
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Filter by Date Range:</label>
+                            </div>
+                            <div class="col-md-3">
+                                <input type="date" class="form-control form-control-sm" id="date-from" placeholder="From Date">
+                            </div>
+                            <div class="col-md-3">
+                                <input type="date" class="form-control form-control-sm" id="date-to" placeholder="To Date">
+                            </div>
+                            <div class="col-md-3">
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="applyDateFilter()">
+                                        <i class="fas fa-filter me-1"></i>Filter
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearDateFilter()">
+                                        <i class="fas fa-times me-1"></i>Clear
+                                    </button>
+                                    <div class="dropdown">
+                                        <button class="btn btn-outline-info btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                            <i class="fas fa-calendar me-1"></i>Quick
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li><a class="dropdown-item" href="#" onclick="setQuickFilter('today')">Today</a></li>
+                                            <li><a class="dropdown-item" href="#" onclick="setQuickFilter('yesterday')">Yesterday</a></li>
+                                            <li><a class="dropdown-item" href="#" onclick="setQuickFilter('week')">This Week</a></li>
+                                            <li><a class="dropdown-item" href="#" onclick="setQuickFilter('month')">This Month</a></li>
+                                            <li><a class="dropdown-item" href="#" onclick="setQuickFilter('last30')">Last 30 Days</a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-2" id="filter-status" style="display: none;">
+                            <div class="col-12">
+                                <small class="text-info">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    <span id="filter-message">Showing all closed tickets</span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    {% if closed_tickets %}
+        <div class="collapse" id="closed-tickets">
+            <div class="row" id="closed-tickets-container">
+                {% for ticket in closed_tickets %}
+                    <div class="col-md-6 col-lg-4 mb-4" data-ticket-id="{{ ticket.id }}">
+                        <div class="card ticket-card h-100 border-secondary opacity-75">
+                            <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                                <h6 class="mb-0 text-muted">
+                                    <i class="fas fa-hashtag"></i> Ticket #{{ ticket.id }}
+                                </h6>
+                                <span class="badge bg-secondary">
+                                    {{ ticket.status }}
+                                </span>
+                            </div>
+                            <div class="card-body">
+                                <h6 class="card-title text-muted">
+                                    <i class="fas fa-user me-1"></i>{{ ticket.user_id }}
+                                </h6>
+                                
+                                {% if ticket.product_id %}
+                                    <p class="text-muted mb-2">
+                                        <small><i class="fas fa-box me-1"></i>Product: {{ ticket.product_id }}</small>
+                                    </p>
+                                {% endif %}
+                                
+                                <div class="mb-3">
+                                    <a href="{{ ticket.pdf_link }}" target="_blank" class="pdf-link text-muted">
+                                        <i class="fas fa-file-pdf me-1"></i>View PDF Guide
+                                    </a>
+                                </div>
+                                
+                                {% if ticket.description %}
+                                    <div class="mb-2">
+                                        <strong class="text-muted">Description:</strong>
+                                        <p class="small text-muted mb-0">{{ ticket.description[:100] }}{% if ticket.description|length > 100 %}...{% endif %}</p>
+                                    </div>
+                                {% endif %}
+                                
+                                {% if ticket.comments %}
+                                    <div class="mb-2">
+                                        <strong class="text-muted">Comments:</strong>
+                                        <p class="small text-muted mb-0">{{ ticket.comments[:100] }}{% if ticket.comments|length > 100 %}...{% endif %}</p>
+                                    </div>
+                                {% endif %}
+                                
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>Created: {{ ticket.created_at }}
+                                </small>
+                            </div>
+                            <div class="card-footer ticket-actions">
+                                <a href="{{ url_for('view_ticket', ticket_id=ticket.id) }}" class="btn btn-outline-secondary btn-sm">
+                                    <i class="fas fa-eye me-1"></i>View
+                                </a>
+                                <a href="{{ url_for('update_status', ticket_id=ticket.id, status='Open') }}" 
+                                   class="btn btn-info btn-sm"
+                                   onclick="return confirm('Reopen this ticket?')">
+                                    <i class="fas fa-undo me-1"></i>Reopen
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <div class="text-center py-3 text-muted">
+            <i class="fas fa-archive me-1"></i>
+            No closed tickets yet
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const socket = io();
+    
+    // Connection status
+    socket.on('connect', function() {
+        console.log('Connected to server');
+        showNotification('Connected to live updates', 'success');
+    });
+    
+    socket.on('disconnect', function() {
+        console.log('Disconnected from server');
+        showNotification('Disconnected from live updates', 'warning');
+    });
+    
+    // Listen for new tickets
+    socket.on('new_ticket', function(ticket) {
+        console.log('New ticket received:', ticket);
+        showNotification(`New ticket #${ticket.id} from ${ticket.user_id}`, 'info');
+        addTicketToDOM(ticket);
+        updateTicketCount();
+    });
+    
+    // Listen for ticket updates
+    socket.on('ticket_updated', function(ticket) {
+        console.log('Ticket updated:', ticket);
+        updateTicketInDOM(ticket);
+        showNotification(`Ticket #${ticket.id} updated`, 'info');
+    });
+    
+    function showNotification(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+    
+    function addTicketToDOM(ticket) {
+        // Remove the "Waiting for Live Tickets" placeholder if it exists
+        const placeholder = document.querySelector('#live-tickets-container .text-center.py-4');
+        if (placeholder) {
+            placeholder.remove();
+        }
+        
+        // Only add to live tickets if it's Open or Pending
+        if (ticket.status === 'Open' || ticket.status === 'Pending') {
+            const liveTicketsContainer = document.querySelector('#live-tickets-container');
+            
+            // Create new ticket card
+            const ticketCard = createTicketCard(ticket, 'live');
+            
+            // Add to beginning of live tickets container
+            liveTicketsContainer.insertAdjacentHTML('afterbegin', ticketCard);
+            
+            // Update live tickets count
+            updateLiveTicketCount();
+        }
+    }
+    
+    function updateTicketInDOM(ticket) {
+        const ticketElement = document.querySelector(`[data-ticket-id="${ticket.id}"]`);
+        if (ticketElement) {
+            const wasInLive = ticketElement.closest('#live-tickets-container');
+            const wasInClosed = ticketElement.closest('#closed-tickets-container');
+            
+            // Remove from current location
+            ticketElement.remove();
+            
+            // Add to appropriate section based on new status
+            if (ticket.status === 'Closed') {
+                addToClosedSection(ticket);
+            } else {
+                // Add to live section (Open or Pending)
+                let liveTicketsContainer = document.querySelector('#live-tickets-container');
+                if (liveTicketsContainer) {
+                    const ticketCard = createTicketCard(ticket, 'live');
+                    liveTicketsContainer.insertAdjacentHTML('afterbegin', ticketCard);
+                }
+            }
+            
+            // Update counts
+            updateLiveTicketCount();
+            updateClosedTicketCount();
+        }
+    }
+    
+    function createTicketCard(ticket, section = 'live') {
+        const statusClass = ticket.status === 'Open' ? 'success' : 
+                           ticket.status === 'Pending' ? 'warning' : 'secondary';
+        
+        const isLive = section === 'live' && (ticket.status === 'Open' || ticket.status === 'Pending');
+        const isClosed = ticket.status === 'Closed';
+        
+        const productIdHtml = ticket.product_id ? 
+            `<p class="text-muted mb-2">
+                <small><i class="fas fa-box me-1"></i>Product: ${ticket.product_id}</small>
+            </p>` : '';
+            
+        const descriptionHtml = ticket.description ? 
+            `<div class="mb-2">
+                <strong${isClosed ? ' class="text-muted"' : ''}>Description:</strong>
+                <p class="small text-muted mb-0">${ticket.description.substring(0, 100)}${ticket.description.length > 100 ? '...' : ''}</p>
+            </div>` : '';
+            
+        const commentsHtml = ticket.comments ? 
+            `<div class="mb-2">
+                <strong${isClosed ? ' class="text-muted"' : ''}>Comments:</strong>
+                <p class="small text-muted mb-0">${ticket.comments.substring(0, 100)}${ticket.comments.length > 100 ? '...' : ''}</p>
+            </div>` : '';
+            
+        const actionButtons = getActionButtons(ticket, isClosed);
+        
+        return `
+            <div class="col-md-6 col-lg-4 mb-4" data-ticket-id="${ticket.id}">
+                <div class="card ticket-card h-100 ${isLive ? 'border-primary' : isClosed ? 'border-secondary opacity-75' : ''}">
+                    <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                        <h6 class="mb-0 ${isClosed ? 'text-muted' : ''}">
+                            <i class="fas fa-hashtag"></i> Ticket #${ticket.id}
+                        </h6>
+                        <span class="badge bg-${statusClass}">
+                            ${ticket.status}
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <h6 class="card-title ${isClosed ? 'text-muted' : ''}">
+                            <i class="fas fa-user me-1"></i>${ticket.user_id}
+                        </h6>
+                        
+                        ${productIdHtml}
+                        
+                        <div class="mb-3">
+                            <a href="${ticket.pdf_link}" target="_blank" class="pdf-link ${isClosed ? 'text-muted' : ''}">
+                                <i class="fas fa-file-pdf me-1"></i>View PDF Guide
+                            </a>
+                        </div>
+                        
+                        ${descriptionHtml}
+                        ${commentsHtml}
+                        
+                        <small class="text-muted">
+                            <i class="fas fa-calendar me-1"></i>Created: ${ticket.created_at}
+                        </small>
+                    </div>
+                    <div class="card-footer ticket-actions">
+                        ${actionButtons}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    function getActionButtons(ticket, isClosed = false) {
+        let buttons = `<a href="/ticket/${ticket.id}" class="btn ${isClosed ? 'btn-outline-secondary' : 'btn-primary'} btn-sm">
+            <i class="fas fa-eye me-1"></i>${isClosed ? 'View' : 'View/Edit'}
+        </a>`;
+        
+        if (ticket.status === 'Open') {
+            buttons += `
+                <a href="/ticket/${ticket.id}/status/Pending" 
+                   class="btn btn-warning btn-sm"
+                   onclick="return confirm('Mark ticket as Pending?')">
+                    <i class="fas fa-clock me-1"></i>Mark Pending
+                </a>`;
+        } else if (ticket.status === 'Pending') {
+            buttons += `
+                <a href="/ticket/${ticket.id}/status/Closed" 
+                   class="btn btn-success btn-sm"
+                   onclick="return confirm('Close this ticket?')">
+                    <i class="fas fa-check me-1"></i>Close
+                </a>
+                <a href="/ticket/${ticket.id}/status/Open" 
+                   class="btn btn-info btn-sm"
+                   onclick="return confirm('Reopen this ticket?')">
+                    <i class="fas fa-undo me-1"></i>Reopen
+                </a>`;
+        } else {
+            buttons += `
+                <a href="/ticket/${ticket.id}/status/Open" 
+                   class="btn btn-info btn-sm"
+                   onclick="return confirm('Reopen this ticket?')">
+                    <i class="fas fa-undo me-1"></i>Reopen
+                </a>`;
+        }
+        
+        return buttons;
+    }
+    
+    function addToClosedSection(ticket) {
+        const closedTicketsContainer = document.querySelector('#closed-tickets-container');
+        const noClosedMessage = document.querySelector('#closed-tickets-section .text-center.py-3');
+        
+        // Remove "No closed tickets yet" message if it exists
+        if (noClosedMessage) {
+            noClosedMessage.remove();
+        }
+        
+        // Add date filter controls if this is the first closed ticket
+        if (!document.querySelector('#date-filter-controls')) {
+            const closedSection = document.querySelector('#closed-tickets-section');
+            const headerDiv = closedSection.querySelector('.d-flex.justify-content-between');
+            const dateFilterHtml = `
+                <div class="row mb-3" id="date-filter-controls">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body py-3">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label small mb-1">Filter by Date Range:</label>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="date" class="form-control form-control-sm" id="date-from" placeholder="From Date">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="date" class="form-control form-control-sm" id="date-to" placeholder="To Date">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="d-flex gap-1">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="applyDateFilter()">
+                                                <i class="fas fa-filter me-1"></i>Filter
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearDateFilter()">
+                                                <i class="fas fa-times me-1"></i>Clear
+                                            </button>
+                                            <div class="dropdown">
+                                                <button class="btn btn-outline-info btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                    <i class="fas fa-calendar me-1"></i>Quick
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li><a class="dropdown-item" href="#" onclick="setQuickFilter('today')">Today</a></li>
+                                                    <li><a class="dropdown-item" href="#" onclick="setQuickFilter('yesterday')">Yesterday</a></li>
+                                                    <li><a class="dropdown-item" href="#" onclick="setQuickFilter('week')">This Week</a></li>
+                                                    <li><a class="dropdown-item" href="#" onclick="setQuickFilter('month')">This Month</a></li>
+                                                    <li><a class="dropdown-item" href="#" onclick="setQuickFilter('last30')">Last 30 Days</a></li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-2" id="filter-status" style="display: none;">
+                                    <div class="col-12">
+                                        <small class="text-info">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            <span id="filter-message">Showing all closed tickets</span>
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            headerDiv.insertAdjacentHTML('afterend', dateFilterHtml);
+        }
+        
+        // Ensure the collapsed section exists
+        let collapsedSection = document.querySelector('#closed-tickets');
+        if (!collapsedSection) {
+            // Create the collapsed section if it doesn't exist
+            const closedHeader = document.querySelector('#closed-tickets-section .d-flex');
+            const collapseHtml = `
+                <div class="collapse" id="closed-tickets">
+                    <div class="row" id="closed-tickets-container"></div>
+                </div>
+            `;
+            closedHeader.parentNode.insertAdjacentHTML('beforeend', collapseHtml);
+            
+            // Add the Show/Hide button if it doesn't exist
+            const buttonContainer = closedHeader.querySelector('.d-flex.align-items-center.gap-2');
+            if (!buttonContainer.querySelector('button')) {
+                buttonContainer.insertAdjacentHTML('beforeend', `
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#closed-tickets" aria-expanded="false">
+                        <i class="fas fa-chevron-down me-1"></i>Show/Hide
+                    </button>
+                `);
+            }
+        }
+        
+        // Create closed ticket card
+        const ticketCard = createTicketCard(ticket, 'closed');
+        
+        // Add to beginning of closed tickets container
+        const container = document.querySelector('#closed-tickets-container');
+        if (container) {
+            container.insertAdjacentHTML('afterbegin', ticketCard);
+        }
+    }
+    
+    function updateLiveTicketCount() {
+        const liveTickets = document.querySelectorAll('#live-tickets-container [data-ticket-id]');
+        const liveCountBadge = document.querySelector('#live-count');
+        if (liveCountBadge) {
+            liveCountBadge.textContent = `${liveTickets.length} Active`;
+        }
+        
+        // Update main counter badge
+        const mainCountBadge = document.querySelector('.badge.bg-primary');
+        if (mainCountBadge) {
+            const allTickets = document.querySelectorAll('[data-ticket-id]');
+            mainCountBadge.textContent = allTickets.length;
+        }
+    }
+    
+    function updateClosedTicketCount() {
+        const closedTickets = document.querySelectorAll('#closed-tickets-container [data-ticket-id]');
+        const closedCountBadge = document.querySelector('#closed-count');
+        if (closedCountBadge) {
+            // Check if we're currently filtering
+            const fromDate = document.getElementById('date-from')?.value;
+            const toDate = document.getElementById('date-to')?.value;
+            
+            if (fromDate || toDate) {
+                // If filtering is active, count visible tickets
+                const visibleTickets = document.querySelectorAll('#closed-tickets-container [data-ticket-id][style*="block"], #closed-tickets-container [data-ticket-id]:not([style*="none"])');
+                closedCountBadge.textContent = `${visibleTickets.length}/${closedTickets.length} Closed`;
+            } else {
+                // No filtering, show total count
+                closedCountBadge.textContent = `${closedTickets.length} Closed`;
+            }
+        }
+        
+        // Update main counter badge
+        const mainCountBadge = document.querySelector('.badge.bg-primary');
+        if (mainCountBadge) {
+            const allTickets = document.querySelectorAll('[data-ticket-id]');
+            mainCountBadge.textContent = allTickets.length;
+        }
+    }
+    
+    function updateTicketCount() {
+        updateLiveTicketCount();
+        updateClosedTicketCount();
+    }
+    
+    // Date filtering functions
+    function applyDateFilter() {
+        const fromDate = document.getElementById('date-from').value;
+        const toDate = document.getElementById('date-to').value;
+        
+        if (!fromDate && !toDate) {
+            showNotification('Please select at least one date', 'warning');
+            return;
+        }
+        
+        filterTicketsByDate(fromDate, toDate);
+        updateFilterStatus(fromDate, toDate);
+    }
+    
+    function clearDateFilter() {
+        document.getElementById('date-from').value = '';
+        document.getElementById('date-to').value = '';
+        
+        // Show all closed tickets
+        const allClosedTickets = document.querySelectorAll('#closed-tickets-container [data-ticket-id]');
+        allClosedTickets.forEach(ticket => {
+            ticket.style.display = 'block';
+        });
+        
+        // Hide filter status
+        document.getElementById('filter-status').style.display = 'none';
+        updateClosedTicketCount();
+    }
+    
+    function setQuickFilter(period) {
+        const today = new Date();
+        let fromDate, toDate;
+        
+        switch(period) {
+            case 'today':
+                fromDate = toDate = formatDate(today);
+                break;
+            case 'yesterday':
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                fromDate = toDate = formatDate(yesterday);
+                break;
+            case 'week':
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - today.getDay());
+                fromDate = formatDate(startOfWeek);
+                toDate = formatDate(today);
+                break;
+            case 'month':
+                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                fromDate = formatDate(startOfMonth);
+                toDate = formatDate(today);
+                break;
+            case 'last30':
+                const thirtyDaysAgo = new Date(today);
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+                fromDate = formatDate(thirtyDaysAgo);
+                toDate = formatDate(today);
+                break;
+        }
+        
+        document.getElementById('date-from').value = fromDate;
+        document.getElementById('date-to').value = toDate;
+        applyDateFilter();
+    }
+    
+    function formatDate(date) {
+        return date.toISOString().split('T')[0];
+    }
+    
+    function filterTicketsByDate(fromDate, toDate) {
+        const allClosedTickets = document.querySelectorAll('#closed-tickets-container [data-ticket-id]');
+        let visibleCount = 0;
+        
+        console.log('Filtering tickets with fromDate:', fromDate, 'toDate:', toDate);
+        console.log('Found', allClosedTickets.length, 'closed tickets');
+        
+        allClosedTickets.forEach(ticketElement => {
+            const ticketDateElement = ticketElement.querySelector('.text-muted small');
+            if (!ticketDateElement) {
+                console.log('No date element found for ticket');
+                ticketElement.style.display = 'block';
+                visibleCount++;
+                return;
+            }
+            
+            const ticketDateText = ticketDateElement.textContent;
+            console.log('Ticket date text:', ticketDateText);
+            
+            const ticketDate = extractDateFromText(ticketDateText);
+            console.log('Extracted date:', ticketDate);
+            
+            if (ticketDate) {
+                const isInRange = isDateInRange(ticketDate, fromDate, toDate);
+                console.log('Is in range:', isInRange, 'for date:', ticketDate);
+                ticketElement.style.display = isInRange ? 'block' : 'none';
+                if (isInRange) visibleCount++;
+            } else {
+                // If we can't extract date, show the ticket
+                console.log('Could not extract date, showing ticket');
+                ticketElement.style.display = 'block';
+                visibleCount++;
+            }
+        });
+        
+        console.log('Visible count:', visibleCount);
+        
+        // Update count to show filtered results
+        const closedCountBadge = document.querySelector('#closed-count');
+        if (closedCountBadge) {
+            const totalCount = allClosedTickets.length;
+            closedCountBadge.textContent = `${visibleCount}/${totalCount} Closed`;
+        }
+    }
+    
+    function extractDateFromText(text) {
+        console.log('Extracting date from:', text);
+        
+        // Try multiple date formats that might be in the database
+        const patterns = [
+            /Created:\s*(\d{4}-\d{2}-\d{2})/,  // YYYY-MM-DD
+            /Created:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/,  // YYYY-MM-DD HH:MM:SS
+            /Created:\s*(\d{1,2}\/\d{1,2}\/\d{4})/,  // MM/DD/YYYY or M/D/YYYY
+            /Created:\s*(\d{1,2}-\d{1,2}-\d{4})/,   // MM-DD-YYYY or M-D-YYYY
+        ];
+        
+        for (let pattern of patterns) {
+            const match = text.match(pattern);
+            if (match) {
+                let dateStr = match[1];
+                console.log('Matched pattern, raw date:', dateStr);
+                
+                // Convert to YYYY-MM-DD format if needed
+                if (dateStr.includes('/')) {
+                    // Handle MM/DD/YYYY format
+                    const parts = dateStr.split('/');
+                    if (parts.length === 3) {
+                        dateStr = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                    }
+                } else if (dateStr.includes(' ')) {
+                    // Handle YYYY-MM-DD HH:MM:SS format - just take the date part
+                    dateStr = dateStr.split(' ')[0];
+                }
+                
+                console.log('Converted date:', dateStr);
+                return dateStr;
+            }
+        }
+        
+        console.log('No date pattern matched');
+        return null;
+    }
+    
+    function isDateInRange(ticketDate, fromDate, toDate) {
+        const ticket = new Date(ticketDate);
+        const from = fromDate ? new Date(fromDate) : null;
+        const to = toDate ? new Date(toDate) : null;
+        
+        // Set time to end of day for 'to' date to include the entire day
+        if (to) {
+            to.setHours(23, 59, 59, 999);
+        }
+        
+        if (from && to) {
+            return ticket >= from && ticket <= to;
+        } else if (from) {
+            return ticket >= from;
+        } else if (to) {
+            return ticket <= to;
+        }
+        
+        return true;
+    }
+    
+    function updateFilterStatus(fromDate, toDate) {
+        const filterStatus = document.getElementById('filter-status');
+        const filterMessage = document.getElementById('filter-message');
+        
+        let message = 'Showing tickets ';
+        if (fromDate && toDate) {
+            if (fromDate === toDate) {
+                message += `from ${formatDisplayDate(fromDate)}`;
+            } else {
+                message += `from ${formatDisplayDate(fromDate)} to ${formatDisplayDate(toDate)}`;
+            }
+        } else if (fromDate) {
+            message += `from ${formatDisplayDate(fromDate)} onwards`;
+        } else if (toDate) {
+            message += `up to ${formatDisplayDate(toDate)}`;
+        }
+        
+        filterMessage.textContent = message;
+        filterStatus.style.display = 'block';
+    }
+    
+    function formatDisplayDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+    }
+</script>
+{% endblock %}
